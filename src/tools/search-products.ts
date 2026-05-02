@@ -23,14 +23,27 @@ export function matchesExcludedAllergen(composition: any, excludeAllergens: stri
 }
 
 /**
- * Check if a product has additives or if additive status is unknown.
- * Treats missing additive fields as "unknown = unsafe" for safety filtering.
+ * Recursively scan ingredients for additives (type: "additive").
+ * Returns true if any additive is found, false if ingredients exist but no additives,
+ * and true if ingredient data is completely missing (unknown = unsafe).
  */
 export function hasAdditivesOrUnknown(composition: any): boolean {
-  const hasAdditives = composition?.withoutAdditives === false || 
-    (composition?.additiveScoreMax !== undefined && composition.additiveScoreMax > 0);
-  const additiveStatusUnknown = composition?.withoutAdditives === undefined && composition?.additiveScoreMax === undefined;
-  return hasAdditives || additiveStatusUnknown;
+  const ingredients = composition?.ingredients;
+  if (!ingredients || !Array.isArray(ingredients) || ingredients.length === 0) {
+    return true; // unknown = unsafe
+  }
+
+  function scan(ingredientList: any[]): boolean {
+    for (const ing of ingredientList) {
+      if (ing?.type === "additive") return true;
+      if (ing?.ingredients && Array.isArray(ing.ingredients)) {
+        if (scan(ing.ingredients)) return true;
+      }
+    }
+    return false;
+  }
+
+  return scan(ingredients);
 }
 
 export function createSearchProductsTool(createRohlikAPI: () => RohlikAPI) {
@@ -148,10 +161,11 @@ export function createSearchProductsTool(createRohlikAPI: () => RohlikAPI) {
               if (possiblyContained.length > 0) {
                 entry += `\n  ⚠️ May contain: ${possiblyContained.join(", ")}`;
               }
-              if (comp.withoutAdditives) {
+              const hasAdditives = hasAdditivesOrUnknown(comp);
+              if (!hasAdditives) {
                 entry += `\n  ✅ No additives`;
-              } else if (comp.additiveScoreMax !== undefined && comp.additiveScoreMax > 0) {
-                entry += `\n  ❌ Contains additives (score: ${comp.additiveScoreMax})`;
+              } else if (comp.ingredients && comp.ingredients.length > 0) {
+                entry += `\n  ❌ Contains additives`;
               }
               const ingredients = comp.ingredients || [];
               if (ingredients.length > 0) {

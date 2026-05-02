@@ -133,41 +133,55 @@ describe('matchesExcludedAllergen', () => {
 });
 
 describe('hasAdditivesOrUnknown', () => {
-  it('should return true when withoutAdditives is false', () => {
-    const composition = { withoutAdditives: false };
-    expect(hasAdditivesOrUnknown(composition)).toBe(true);
-  });
-
-  it('should return true when additiveScoreMax > 0', () => {
-    const composition = { additiveScoreMax: 3 };
-    expect(hasAdditivesOrUnknown(composition)).toBe(true);
-  });
-
-  it('should return false when withoutAdditives is true', () => {
-    const composition = { withoutAdditives: true };
-    expect(hasAdditivesOrUnknown(composition)).toBe(false);
-  });
-
-  it('should return false when additiveScoreMax is 0', () => {
-    const composition = { additiveScoreMax: 0 };
-    expect(hasAdditivesOrUnknown(composition)).toBe(false);
-  });
-
-  it('should return true when both additive fields are missing (unknown = unsafe)', () => {
+  it('should return true when an ingredient has type "additive"', () => {
     const composition = {
-      allergens: { contained: [], possiblyContained: [] },
-      ingredients: []
+      ingredients: [
+        { name: 'E621', type: 'additive' },
+        { name: 'Voda', type: 'ingredient' }
+      ]
     };
     expect(hasAdditivesOrUnknown(composition)).toBe(true);
   });
 
-  it('should return false when withoutAdditives is true even if additiveScoreMax is missing', () => {
-    const composition = { withoutAdditives: true };
+  it('should return false when ingredients exist but no additives', () => {
+    const composition = {
+      ingredients: [
+        { name: 'Voda', type: 'ingredient' },
+        { name: 'Cukr', type: 'ingredient' }
+      ]
+    };
     expect(hasAdditivesOrUnknown(composition)).toBe(false);
   });
 
-  it('should return true when withoutAdditives is missing but additiveScoreMax > 0', () => {
-    const composition = { additiveScoreMax: 1 };
+  it('should return true for nested additives (recursive scan)', () => {
+    const composition = {
+      ingredients: [
+        { name: 'Těsto', type: 'ingredient', ingredients: [
+          { name: 'E450', type: 'additive' }
+        ]}
+      ]
+    };
+    expect(hasAdditivesOrUnknown(composition)).toBe(true);
+  });
+
+  it('should return false for nested ingredients without additives', () => {
+    const composition = {
+      ingredients: [
+        { name: 'Těsto', type: 'ingredient', ingredients: [
+          { name: 'Mouka', type: 'ingredient' }
+        ]}
+      ]
+    };
+    expect(hasAdditivesOrUnknown(composition)).toBe(false);
+  });
+
+  it('should return true when ingredients array is empty (unknown = unsafe)', () => {
+    const composition = { allergens: { contained: [], possiblyContained: [] }, ingredients: [] };
+    expect(hasAdditivesOrUnknown(composition)).toBe(true);
+  });
+
+  it('should return true when ingredients field is missing (unknown = unsafe)', () => {
+    const composition = { allergens: { contained: [], possiblyContained: [] } };
     expect(hasAdditivesOrUnknown(composition)).toBe(true);
   });
 
