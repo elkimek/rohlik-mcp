@@ -34,6 +34,7 @@ export function createSearchProductsTool(createRohlikAPI: () => RohlikAPI) {
       } = args;
 
       const needsComposition = include_composition || (exclude_allergens && exclude_allergens.length > 0) || require_no_additives;
+      const safetyFilterActive = (exclude_allergens && exclude_allergens.length > 0) || require_no_additives;
 
       try {
         const api = createRohlikAPI();
@@ -48,9 +49,15 @@ export function createSearchProductsTool(createRohlikAPI: () => RohlikAPI) {
           for (const product of results) {
             const composition = compositions.get(product.id);
 
-            // P1 FIX: Unknown composition is UNSAFE when filters are active
+            // P1 FIX: Unknown composition is UNSAFE when safety filters are active
+            // Only skip when a safety filter is actually on — not for include_composition alone
+            if (composition === null && safetyFilterActive) {
+              continue;
+            }
+
+            // No filter active — include product without composition data
             if (composition === null) {
-              // Skip products with unknown composition when safety filters are on
+              enrichedResults.push(product);
               continue;
             }
 
@@ -78,11 +85,12 @@ export function createSearchProductsTool(createRohlikAPI: () => RohlikAPI) {
               }
             }
 
-            // Filter by additives
+            // P1 FIX: Filter by additives — treat missing additive fields as "unknown = unsafe"
             if (!skip && require_no_additives) {
               const hasAdditives = composition?.withoutAdditives === false || 
                 (composition?.additiveScoreMax !== undefined && composition.additiveScoreMax > 0);
-              if (hasAdditives) {
+              const additiveStatusUnknown = composition?.withoutAdditives === undefined && composition?.additiveScoreMax === undefined;
+              if (hasAdditives || additiveStatusUnknown) {
                 skip = true;
               }
             }

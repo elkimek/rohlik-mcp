@@ -579,6 +579,8 @@ export class RohlikAPI {
           console.error(`Failed to fetch composition for product ${id}:`, error);
           results.set(id, null);
         }
+        // Explicit inter-request delay to respect API rate limits and avoid mid-batch throttling
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
       return results;
     } finally {
