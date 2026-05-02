@@ -68,38 +68,43 @@ const shoppingScenarios = createShoppingScenariosTool();
 const discountedItems = createDiscountedItemsTool(createRohlikAPI);
 const productComposition = createProductCompositionTool(createRohlikAPI);
 
-// Core functionality
-server.registerTool(searchProducts.name, searchProducts.definition, searchProducts.handler);
-server.registerTool(cartTools.addToCart.name, cartTools.addToCart.definition, cartTools.addToCart.handler);
-server.registerTool(cartTools.getCartContent.name, cartTools.getCartContent.definition, cartTools.getCartContent.handler);
-server.registerTool(cartTools.removeFromCart.name, cartTools.removeFromCart.definition, cartTools.removeFromCart.handler);
-server.registerTool(shoppingLists.name, shoppingLists.definition, shoppingLists.handler);
-server.registerTool(accountData.name, accountData.definition, accountData.handler);
+// Registering each tool as a separate generic call causes TS2589 ("type
+// instantiation is excessively deep") under @modelcontextprotocol/sdk >=1.24,
+// because registerTool infers a heavy type from each Zod inputSchema. Funneling
+// every tool through a single loosely-typed entry collapses inference to one
+// call site and keeps type-checking tractable.
+const tools: Array<{ name: string; definition: any; handler: any }> = [
+  // Core functionality
+  searchProducts,
+  cartTools.addToCart,
+  cartTools.getCartContent,
+  cartTools.removeFromCart,
+  shoppingLists,
+  accountData,
+  // Order management
+  orderHistory,
+  orderDetail,
+  upcomingOrders,
+  // Delivery management
+  deliveryInfo,
+  deliverySlots,
+  // Account features
+  premiumInfo,
+  announcements,
+  reusableBags,
+  // Smart shopping features
+  frequentItems,
+  mealSuggestions,
+  shoppingScenarios,
+  // Deals & discounts
+  discountedItems,
+  // Product composition & safety
+  productComposition,
+];
 
-// Order management
-server.registerTool(orderHistory.name, orderHistory.definition, orderHistory.handler);
-server.registerTool(orderDetail.name, orderDetail.definition, orderDetail.handler);
-server.registerTool(upcomingOrders.name, upcomingOrders.definition, upcomingOrders.handler);
-
-// Delivery management
-server.registerTool(deliveryInfo.name, deliveryInfo.definition, deliveryInfo.handler);
-server.registerTool(deliverySlots.name, deliverySlots.definition, deliverySlots.handler);
-
-// Account features
-server.registerTool(premiumInfo.name, premiumInfo.definition, premiumInfo.handler);
-server.registerTool(announcements.name, announcements.definition, announcements.handler);
-server.registerTool(reusableBags.name, reusableBags.definition, reusableBags.handler);
-
-// Smart shopping features
-server.registerTool(frequentItems.name, frequentItems.definition, frequentItems.handler);
-server.registerTool(mealSuggestions.name, mealSuggestions.definition, mealSuggestions.handler);
-server.registerTool(shoppingScenarios.name, shoppingScenarios.definition, shoppingScenarios.handler);
-
-// Deals & discounts
-server.registerTool(discountedItems.name, discountedItems.definition, discountedItems.handler);
-
-// Product composition & safety
-server.registerTool(productComposition.name, productComposition.definition, productComposition.handler);
+for (const tool of tools) {
+  server.registerTool(tool.name, tool.definition, tool.handler);
+}
 
 async function main() {
   const transport = new StdioServerTransport();
