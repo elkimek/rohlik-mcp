@@ -39,47 +39,59 @@ export function createSearchProductsTool(createRohlikAPI: () => RohlikAPI) {
         const api = createRohlikAPI();
         let results = await api.searchProducts(product_name, limit * 2, favourite_only);
 
-        // Fetch composition data if needed
+        // Fetch composition data if needed — use batch method to avoid N× login/logout
         if (needsComposition && results.length > 0) {
+          const productIds = results.map((p: any) => p.id);
+          const compositions = await api.getProductCompositions(productIds);
+
           const enrichedResults = [];
           for (const product of results) {
-            try {
-              const composition = await api.getProductComposition(product.id);
-              let skip = false;
+            const composition = compositions.get(product.id);
 
-              // Filter by allergens
-              if (exclude_allergens && exclude_allergens.length > 0) {
-                const contained = composition?.allergens?.contained || [];
-                const possiblyContained = composition?.allergens?.possiblyContained || [];
-                const allAllergens = [...contained, ...possiblyContained];
-                const normalizedAllergens = allAllergens.map(a => a.toLowerCase());
-                const normalizedExclude = exclude_allergens.map(a => a.toLowerCase());
-                
-                if (normalizedExclude.some(ex => normalizedAllergens.includes(ex))) {
-                  skip = true;
-                }
-              }
+            // P1 FIX: Unknown composition is UNSAFE when filters are active
+            if (composition === null) {
+              // Skip products with unknown composition when safety filters are on
+              continue;
+            }
 
-              // Filter by additives
-              if (!skip && require_no_additives) {
-                const hasAdditives = composition?.withoutAdditives === false || 
-                  (composition?.additiveScoreMax !== undefined && composition.additiveScoreMax > 0);
-                if (hasAdditives) {
-                  skip = true;
-                }
-              }
+            let skip = false;
 
-              if (!skip) {
-                enrichedResults.push({
-                  ...product,
-                  composition: include_composition ? composition : undefined
-                });
+            // P1 FIX: Substring matching for compound allergen strings
+            if (exclude_allergens && exclude_allergens.length > 0) {
+              const allergens = composition?.allergens || {};
+              const contained = allergens.contained || [];
+              const possiblyContained = allergens.possiblyContained || [];
+              const allAllergens = [...contained, ...possiblyContained];
+              
+              const normalizedExclude = exclude_allergens.map(a => a.toLowerCase().trim());
+              
+              // Check if any excluded allergen matches any API allergen (substring in either direction)
+              const hasExcludedAllergen = normalizedExclude.some(ex => 
+                allAllergens.some((apiAllergen: string) => {
+                  const a = apiAllergen.toLowerCase();
+                  return a.includes(ex) || ex.includes(a);
+                })
+              );
+
+              if (hasExcludedAllergen) {
+                skip = true;
               }
-            } catch (e) {
-              // If composition fetch fails, include product only if no filters are active
-              if (!exclude_allergens && !require_no_additives) {
-                enrichedResults.push(product);
+            }
+
+            // Filter by additives
+            if (!skip && require_no_additives) {
+              const hasAdditives = composition?.withoutAdditives === false || 
+                (composition?.additiveScoreMax !== undefined && composition.additiveScoreMax > 0);
+              if (hasAdditives) {
+                skip = true;
               }
+            }
+
+            if (!skip) {
+              enrichedResults.push({
+                ...product,
+                composition: include_composition ? composition : undefined
+              });
             }
           }
           results = enrichedResults;
@@ -89,7 +101,7 @@ export function createSearchProductsTool(createRohlikAPI: () => RohlikAPI) {
         results = results.slice(0, limit);
 
         if (results.length === 0) {
-          const filterNote = needsComposition ? " (after applying composition filters)" : "";
+          const filterNote = needsComposition ? " (after applying composition filters — unknown/missing composition data is treated as unsafe)" : "";
           return {
             content: [{ type: "text" as const, text: `No products found${filterNote} for "${product_name}".` }]
           };
