@@ -1,6 +1,38 @@
 import { z } from "zod";
 import { RohlikAPI } from "../rohlik-api.js";
 
+/**
+ * Check if a product's composition contains any of the excluded allergens.
+ * Uses bidirectional substring matching to handle compound API strings like
+ * "mléko a výrobky z mléka" matching "mléko".
+ */
+export function matchesExcludedAllergen(composition: any, excludeAllergens: string[]): boolean {
+  const allergens = composition?.allergens || {};
+  const contained = allergens.contained || [];
+  const possiblyContained = allergens.possiblyContained || [];
+  const allAllergens = [...contained, ...possiblyContained];
+  
+  const normalizedExclude = excludeAllergens.map(a => a.toLowerCase().trim());
+  
+  return normalizedExclude.some(ex => 
+    allAllergens.some((apiAllergen: string) => {
+      const a = apiAllergen.toLowerCase();
+      return a.includes(ex) || ex.includes(a);
+    })
+  );
+}
+
+/**
+ * Check if a product has additives or if additive status is unknown.
+ * Treats missing additive fields as "unknown = unsafe" for safety filtering.
+ */
+export function hasAdditivesOrUnknown(composition: any): boolean {
+  const hasAdditives = composition?.withoutAdditives === false || 
+    (composition?.additiveScoreMax !== undefined && composition.additiveScoreMax > 0);
+  const additiveStatusUnknown = composition?.withoutAdditives === undefined && composition?.additiveScoreMax === undefined;
+  return hasAdditives || additiveStatusUnknown;
+}
+
 export function createSearchProductsTool(createRohlikAPI: () => RohlikAPI) {
   return {
     name: "search_products",
@@ -65,32 +97,14 @@ export function createSearchProductsTool(createRohlikAPI: () => RohlikAPI) {
 
             // P1 FIX: Substring matching for compound allergen strings
             if (exclude_allergens && exclude_allergens.length > 0) {
-              const allergens = composition?.allergens || {};
-              const contained = allergens.contained || [];
-              const possiblyContained = allergens.possiblyContained || [];
-              const allAllergens = [...contained, ...possiblyContained];
-              
-              const normalizedExclude = exclude_allergens.map(a => a.toLowerCase().trim());
-              
-              // Check if any excluded allergen matches any API allergen (substring in either direction)
-              const hasExcludedAllergen = normalizedExclude.some(ex => 
-                allAllergens.some((apiAllergen: string) => {
-                  const a = apiAllergen.toLowerCase();
-                  return a.includes(ex) || ex.includes(a);
-                })
-              );
-
-              if (hasExcludedAllergen) {
+              if (matchesExcludedAllergen(composition, exclude_allergens)) {
                 skip = true;
               }
             }
 
             // P1 FIX: Filter by additives — treat missing additive fields as "unknown = unsafe"
             if (!skip && require_no_additives) {
-              const hasAdditives = composition?.withoutAdditives === false || 
-                (composition?.additiveScoreMax !== undefined && composition.additiveScoreMax > 0);
-              const additiveStatusUnknown = composition?.withoutAdditives === undefined && composition?.additiveScoreMax === undefined;
-              if (hasAdditives || additiveStatusUnknown) {
+              if (hasAdditivesOrUnknown(composition)) {
                 skip = true;
               }
             }
