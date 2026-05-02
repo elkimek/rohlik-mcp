@@ -1,49 +1,139 @@
 import { z } from "zod";
 import { RohlikAPI } from "../rohlik-api.js";
-import { RohlikCredentials } from "../types.js";
 
 export function createSearchProductsTool(createRohlikAPI: () => RohlikAPI) {
   return {
     name: "search_products",
     definition: {
       title: "Search Products",
-      description: "Search for products on Rohlik.cz by name",
+      description: "Search for products on Rohlik.cz by name. Optionally verify ingredients and filter out products containing specific allergens or additives.",
       inputSchema: {
         product_name: z.string().min(1, "Product name cannot be empty").describe("The name or search term for the product"),
         limit: z.number().min(1).max(50).default(10).describe("Maximum number of products to return (1-50, default: 10)"),
-        favourite_only: z.boolean().default(false).describe("Whether to return only favourite products (default: false)")
+        favourite_only: z.boolean().default(false).describe("Whether to return only favourite products (default: false)"),
+        exclude_allergens: z.array(z.string()).optional().describe("List of allergens to exclude (e.g. ['Mléko', 'Ořechy']). If provided, composition data will be fetched for each result and products containing these allergens will be filtered out."),
+        require_no_additives: z.boolean().default(false).describe("If true, filter out products that contain additives. Composition data will be fetched for each result."),
+        include_composition: z.boolean().default(false).describe("If true, include full composition data (ingredients, allergens, nutrition) for each product. Note: this makes the search slower as it fetches composition for each result.")
       }
     },
-    handler: async (args: { product_name: string; limit?: number; favourite_only?: boolean }) => {
-      const { product_name, limit = 10, favourite_only = false } = args;
+    handler: async (args: { 
+      product_name: string; 
+      limit?: number; 
+      favourite_only?: boolean;
+      exclude_allergens?: string[];
+      require_no_additives?: boolean;
+      include_composition?: boolean;
+    }) => {
+      const { 
+        product_name, 
+        limit = 10, 
+        favourite_only = false,
+        exclude_allergens,
+        require_no_additives = false,
+        include_composition = false
+      } = args;
+
+      const needsComposition = include_composition || (exclude_allergens && exclude_allergens.length > 0) || require_no_additives;
+
       try {
         const api = createRohlikAPI();
-        const results = await api.searchProducts(product_name, limit, favourite_only);
+        let results = await api.searchProducts(product_name, limit * 2, favourite_only);
 
-        const output = `Found ${results.length} products:\n\n` +
+        // Fetch composition data if needed
+        if (needsComposition && results.length > 0) {
+          const enrichedResults = [];
+          for (const product of results) {
+            try {
+              const composition = await api.getProductComposition(product.id);
+              let skip = false;
+
+              // Filter by allergens
+              if (exclude_allergens && exclude_allergens.length > 0) {
+                const contained = composition?.allergens?.contained || [];
+                const possiblyContained = composition?.allergens?.possiblyContained || [];
+                const allAllergens = [...contained, ...possiblyContained];
+                const normalizedAllergens = allAllergens.map(a => a.toLowerCase());
+                const normalizedExclude = exclude_allergens.map(a => a.toLowerCase());
+                
+                if (normalizedExclude.some(ex => normalizedAllergens.includes(ex))) {
+                  skip = true;
+                }
+              }
+
+              // Filter by additives
+              if (!skip && require_no_additives) {
+                const hasAdditives = composition?.withoutAdditives === false || 
+                  (composition?.additiveScoreMax !== undefined && composition.additiveScoreMax > 0);
+                if (hasAdditives) {
+                  skip = true;
+                }
+              }
+
+              if (!skip) {
+                enrichedResults.push({
+                  ...product,
+                  composition: include_composition ? composition : undefined
+                });
+              }
+            } catch (e) {
+              // If composition fetch fails, include product only if no filters are active
+              if (!exclude_allergens && !require_no_additives) {
+                enrichedResults.push(product);
+              }
+            }
+          }
+          results = enrichedResults;
+        }
+
+        // Limit results
+        results = results.slice(0, limit);
+
+        if (results.length === 0) {
+          const filterNote = needsComposition ? " (after applying composition filters)" : "";
+          return {
+            content: [{ type: "text" as const, text: `No products found${filterNote} for "${product_name}".` }]
+          };
+        }
+
+        const output = `Found ${results.length} products${needsComposition ? " (verified for ingredients)" : ""}:\n\n` +
           results.map((product: any) => {
             const priceInfo = product.salePrice
               ? `Price: ${product.salePrice} (was ${product.originalPrice}, -${product.discountPercentage}%)`
               : `Price: ${product.price}`;
-            return `• ${product.name} (${product.brand})\n  ${priceInfo}\n  Amount: ${product.amount}\n  ID: ${product.id}`;
+            let entry = `• ${product.name} (${product.brand})\n  ${priceInfo}\n  Amount: ${product.amount}\n  ID: ${product.id}`;
+
+            if (product.composition) {
+              const comp = product.composition;
+              const allergens = comp.allergens || {};
+              const contained = allergens.contained || [];
+              const possiblyContained = allergens.possiblyContained || [];
+              if (contained.length > 0) {
+                entry += `\n  ⚠️ Contains: ${contained.join(", ")}`;
+              }
+              if (possiblyContained.length > 0) {
+                entry += `\n  ⚠️ May contain: ${possiblyContained.join(", ")}`;
+              }
+              if (comp.withoutAdditives) {
+                entry += `\n  ✅ No additives`;
+              } else if (comp.additiveScoreMax !== undefined && comp.additiveScoreMax > 0) {
+                entry += `\n  ❌ Contains additives (score: ${comp.additiveScoreMax})`;
+              }
+              const ingredients = comp.ingredients || [];
+              if (ingredients.length > 0) {
+                const ingredientNames = ingredients.map((i: any) => i.name).join(", ");
+                entry += `\n  Ingredients: ${ingredientNames.slice(0, 200)}${ingredientNames.length > 200 ? "..." : ""}`;
+              }
+            }
+
+            return entry;
           }).join('\n\n');
 
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: output
-            }
-          ]
+          content: [{ type: "text" as const, text: output }]
         };
       } catch (error) {
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: error instanceof Error ? error.message : String(error)
-            }
-          ],
+          content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }],
           isError: true
         };
       }

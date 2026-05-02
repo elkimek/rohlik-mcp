@@ -553,4 +553,15 @@ export class RohlikAPI {
       await this.logout();
     }
   }
+
+  async getProductComposition(productId: number): Promise<any> {
+    await this.login();
+
+    try {
+      const response = await this.makeRequest<any>(`/api/v1/products/${productId}/composition`);
+      return response.data || response;
+    } finally {
+      await this.logout();
+    }
+  }
 }
