@@ -442,7 +442,7 @@ export class RohlikAPI {
 
   async getProductComposition(productId: number): Promise<any | null> {
     const response = await this.makeRequest<any>(`/api/v1/products/${encodeURIComponent(String(productId))}/composition`);
-    return response.data ?? null;
+    return response.data ?? response ?? null;
   }
 
   async getProductCompositions(productIds: number[]): Promise<Map<number, any | null>> {
@@ -451,7 +451,7 @@ export class RohlikAPI {
       const id = productIds[i];
       try {
         const response = await this.makeRequest<any>(`/api/v1/products/${encodeURIComponent(String(id))}/composition`);
-        results.set(id, response.data ?? null);
+        results.set(id, response.data ?? response ?? null);
       } catch (error) {
         debugLog(`Failed to fetch composition for product ${id}:`, error);
         results.set(id, null);

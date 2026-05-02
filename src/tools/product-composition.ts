@@ -57,18 +57,31 @@ export function createProductCompositionTool(createRohlikAPI: () => RohlikAPI) {
         }
 
         // Nutritional values
-        const nutrition = composition.nutritionalValues || {};
-        const hasNutrition = Object.keys(nutrition).length > 0;
-        if (hasNutrition) {
+        const nutritionRaw = composition.nutritionalValues;
+        let nutritionLines: string[] = [];
+
+        if (Array.isArray(nutritionRaw) && nutritionRaw.length > 0) {
+          // API returns array of { name, values: { per100g, perPortion } }
+          for (const item of nutritionRaw) {
+            const name = item.name || item.label || "Unknown";
+            const val = item.values?.per100g ?? item.values?.perPortion ?? item.value ?? "";
+            if (val) nutritionLines.push(`• ${name}: ${val}`);
+          }
+        } else if (nutritionRaw && typeof nutritionRaw === "object" && Object.keys(nutritionRaw).length > 0) {
+          // Flat object format
+          if (nutritionRaw.energy) nutritionLines.push(`• Energy: ${nutritionRaw.energy}`);
+          if (nutritionRaw.fat) nutritionLines.push(`• Fat: ${nutritionRaw.fat}`);
+          if (nutritionRaw.saturatedFat) nutritionLines.push(`• Saturated Fat: ${nutritionRaw.saturatedFat}`);
+          if (nutritionRaw.carbohydrates) nutritionLines.push(`• Carbohydrates: ${nutritionRaw.carbohydrates}`);
+          if (nutritionRaw.sugars) nutritionLines.push(`• Sugars: ${nutritionRaw.sugars}`);
+          if (nutritionRaw.protein) nutritionLines.push(`• Protein: ${nutritionRaw.protein}`);
+          if (nutritionRaw.salt) nutritionLines.push(`• Salt: ${nutritionRaw.salt}`);
+          if (nutritionRaw.fiber) nutritionLines.push(`• Fiber: ${nutritionRaw.fiber}`);
+        }
+
+        if (nutritionLines.length > 0) {
           lines.push("## Nutritional Values (per 100g/100ml)");
-          if (nutrition.energy) lines.push(`• Energy: ${nutrition.energy}`);
-          if (nutrition.fat) lines.push(`• Fat: ${nutrition.fat}`);
-          if (nutrition.saturatedFat) lines.push(`• Saturated Fat: ${nutrition.saturatedFat}`);
-          if (nutrition.carbohydrates) lines.push(`• Carbohydrates: ${nutrition.carbohydrates}`);
-          if (nutrition.sugars) lines.push(`• Sugars: ${nutrition.sugars}`);
-          if (nutrition.protein) lines.push(`• Protein: ${nutrition.protein}`);
-          if (nutrition.salt) lines.push(`• Salt: ${nutrition.salt}`);
-          if (nutrition.fiber) lines.push(`• Fiber: ${nutrition.fiber}`);
+          lines.push(...nutritionLines);
           lines.push("");
         }
 
