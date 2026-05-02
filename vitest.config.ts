@@ -11,8 +11,7 @@ export default defineConfig({
         'dist/**',
         'tests/**',
         '**/*.test.ts',
-        '**/*.config.ts',
-        'src/test-tools/**'
+        '**/*.config.ts'
       ]
     }
   }

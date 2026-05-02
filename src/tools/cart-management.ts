@@ -21,20 +21,27 @@ export function createCartManagementTools(createRohlikAPI: () => RohlikAPI) {
       }) => {
         try {
           const api = createRohlikAPI();
-          const addedProducts = await api.addToCart(products);
-          const successCount = addedProducts.length;
+          const { added, failed } = await api.addToCart(products);
           const totalRequested = products.length;
 
-          const output = `Successfully added ${successCount}/${totalRequested} products to cart.\n` +
-            (addedProducts.length > 0 ? `Added product IDs: ${addedProducts.join(', ')}` : 'No products were added.');
+          const lines = [`Added ${added.length}/${totalRequested} products to cart.`];
+          if (added.length > 0) lines.push(`Added product IDs: ${added.join(', ')}`);
+          if (failed.length > 0) {
+            lines.push('');
+            lines.push('Failed:');
+            for (const f of failed) {
+              lines.push(`• Product ${f.productId}: ${f.reason}`);
+            }
+          }
 
           return {
             content: [
               {
                 type: "text" as const,
-                text: output
+                text: lines.join('\n')
               }
-            ]
+            ],
+            isError: failed.length > 0 && added.length === 0,
           };
         } catch (error) {
           return {

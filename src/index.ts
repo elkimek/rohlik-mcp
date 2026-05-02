@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { z } from "zod";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { RohlikAPI } from "./rohlik-api.js";
@@ -21,35 +22,41 @@ import { createShoppingScenariosTool } from "./tools/shopping-scenarios.js";
 import { createDiscountedItemsTool } from "./tools/discounted-items.js";
 import { createProductCompositionTool } from "./tools/product-composition.js";
 
+export interface Tool {
+  name: string;
+  definition: {
+    title: string;
+    description: string;
+    inputSchema: Record<string, z.ZodTypeAny>;
+  };
+  handler: (args: any) => Promise<{
+    content: Array<{ type: "text"; text: string }>;
+    isError?: boolean;
+  }>;
+}
+
 const server = new McpServer(
-  {
-    name: "rohlik-mcp",
-    version: "1.0.0",
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
-  }
+  { name: "rohlik-mcp", version: "1.0.0" },
+  { capabilities: { tools: {} } },
 );
 
-function getCredentials() {
-  const username = process.env.ROHLIK_USERNAME;
-  const password = process.env.ROHLIK_PASSWORD;
-
-  if (!username || !password) {
-    throw new Error('ROHLIK_USERNAME and ROHLIK_PASSWORD environment variables are required');
+// Cache the API instance for the lifetime of the process so we authenticate
+// once and reuse the session across tool calls. Without this, every tool call
+// triggers a fresh login + logout pair against Rohlik's auth endpoint, which
+// invites anti-fraud heuristics, 2FA challenges, and unnecessary latency.
+let apiInstance: RohlikAPI | undefined;
+function createRohlikAPI(): RohlikAPI {
+  if (!apiInstance) {
+    const username = process.env.ROHLIK_USERNAME;
+    const password = process.env.ROHLIK_PASSWORD;
+    if (!username || !password) {
+      throw new Error("ROHLIK_USERNAME and ROHLIK_PASSWORD environment variables are required");
+    }
+    apiInstance = new RohlikAPI({ username, password });
   }
-
-  return { username, password };
+  return apiInstance;
 }
 
-function createRohlikAPI() {
-  const credentials = getCredentials();
-  return new RohlikAPI(credentials);
-}
-
-// Register all tools
 const searchProducts = createSearchProductsTool(createRohlikAPI);
 const cartTools = createCartManagementTools(createRohlikAPI);
 const shoppingLists = createShoppingListsTool(createRohlikAPI);
@@ -68,42 +75,33 @@ const shoppingScenarios = createShoppingScenariosTool();
 const discountedItems = createDiscountedItemsTool(createRohlikAPI);
 const productComposition = createProductCompositionTool(createRohlikAPI);
 
-// Registering each tool as a separate generic call causes TS2589 ("type
-// instantiation is excessively deep") under @modelcontextprotocol/sdk >=1.24,
-// because registerTool infers a heavy type from each Zod inputSchema. Funneling
-// every tool through a single loosely-typed entry collapses inference to one
-// call site and keeps type-checking tractable.
-const tools: Array<{ name: string; definition: any; handler: any }> = [
-  // Core functionality
+// Funneling every tool through one loosely-typed loop avoids TS2589
+// ("type instantiation is excessively deep") that registerTool's per-call
+// generic inference triggers under @modelcontextprotocol/sdk >=1.24.
+const tools: Tool[] = [
   searchProducts,
   cartTools.addToCart,
   cartTools.getCartContent,
   cartTools.removeFromCart,
   shoppingLists,
   accountData,
-  // Order management
   orderHistory,
   orderDetail,
   upcomingOrders,
-  // Delivery management
   deliveryInfo,
   deliverySlots,
-  // Account features
   premiumInfo,
   announcements,
   reusableBags,
-  // Smart shopping features
   frequentItems,
   mealSuggestions,
   shoppingScenarios,
-  // Deals & discounts
   discountedItems,
-  // Product composition & safety
   productComposition,
 ];
 
 for (const tool of tools) {
-  server.registerTool(tool.name, tool.definition, tool.handler);
+  server.registerTool(tool.name, tool.definition as any, tool.handler as any);
 }
 
 async function main() {

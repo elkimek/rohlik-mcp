@@ -96,19 +96,19 @@ export function createShoppingScenariosTool() {
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🔧 AVAILABLE TOOLS (${16}):
+🔧 AVAILABLE TOOLS (19):
 
 📦 Shopping:
-   • search_products - Find products by name
+   • search_products - Find products by name (with allergen/additive filtering)
    • add_to_cart - Add products to cart
    • get_cart_content - View current cart
    • remove_from_cart - Remove items
    • get_shopping_list - View shopping lists
 
 🤖 Smart Features:
-   • get_meal_suggestions - Meal-based suggestions (NEW!)
+   • get_meal_suggestions - Meal-based suggestions
    • get_frequent_items - Most purchased items
-   • get_shopping_scenarios - This help (NEW!)
+   • get_shopping_scenarios - This help
 
 📊 Orders:
    • get_order_history - Past orders
@@ -124,6 +124,10 @@ export function createShoppingScenariosTool() {
    • get_premium_info - Premium subscription
    • get_announcements - Current announcements
    • get_reusable_bags_info - Bag tracking
+
+🥦 Deals & Composition:
+   • get_discounted_items - Current sales / deals
+   • get_product_composition - Ingredients, allergens, nutrition
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
