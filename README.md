@@ -101,6 +101,7 @@ If `ROHLIK_BASE_URL` is not specified, it defaults to the Czech version.
 
 ### Deals & Discounts
 - `get_discounted_items` - Browse currently discounted items (cenové trháky), optionally filtered by food category, with sorting and pagination
+- `get_product_composition` - Fetch ingredients, allergens, additive scores, and nutritional values for a product
 
 ### Getting info
 - `get_account_data` - Get comprehensive account information including delivery details, orders, announcements, cart, and premium status
@@ -126,7 +127,7 @@ npm run build
 
 - `npm run build` - Compile TypeScript to JavaScript
 - `npm start` - Launch the production server
-- `npm run dev` - Start development mode with watch
+- `npm run watch` - Recompile on change (`tsc --watch`)
 - `npm run inspect` - Test with MCP Inspector
 - `npm test` - Run unit tests
 - `npm run test:watch` - Run tests in watch mode
@@ -152,8 +153,10 @@ npm run test:coverage
 **What's tested:**
 - Frequency analysis algorithms (`get_frequent_items`)
 - Meal suggestion filtering and ranking (`get_meal_suggestions`)
+- Allergen and additive filters in `search_products`
 - Price averaging and calculations
 - Category filtering and grouping
+- HTTP-layer behavior in `RohlikAPI`: cookie jar, concurrent login lock, 401 → re-login → retry, response-body capture in errors, `addToCart` per-product failure surfacing, login success heuristic
 - Edge cases (empty data, missing fields, etc.)
 
 See [tests/README.md](./tests/README.md) for detailed testing documentation.
@@ -262,7 +265,7 @@ For your config file, instead of `%APPDATA%/Claude/claude_desktop_config.json` u
 - API rate limiting
 
 **Solutions:**
-- For smart shopping: reduce number of orders analyzed (try 10 instead of default 20)
+- For smart shopping: reduce number of orders analyzed (e.g. `orders_to_analyze: 3` — default is 5, max 20)
 - Use fewer requests or add delays between bulk operations
 - Check your network connection
 

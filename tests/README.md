@@ -6,23 +6,38 @@ This directory contains all tests for the Rohlik MCP server.
 
 ```
 tests/
-├── README.md                    # This file
-├── helpers.ts                   # Mock data generators and test utilities
-├── frequent-items.test.ts       # Unit tests for frequency analysis
-├── meal-suggestions.test.ts     # Unit tests for meal suggestions
-├── validate-api.ts              # Integration tests against real API
-├── validation-results.json      # API validation results (generated)
-└── validation-report.html       # HTML report (generated)
+├── README.md                       # This file
+├── helpers.ts                      # Mock data generators and test utilities
+├── frequent-items.test.ts          # Unit tests for frequency analysis
+├── meal-suggestions.test.ts        # Unit tests for meal suggestions
+├── search-products-filter.test.ts  # Unit tests for allergen/additive filters
+├── rohlik-api.test.ts              # HTTP-layer tests (cookie jar, retry, addToCart, login)
+├── validate-api.ts                 # Integration tests against real API
+├── validation-results.json         # API validation results (generated)
+└── validation-report.html          # HTML report (generated)
 ```
 
 ## Test Categories
 
 ### Unit Tests
 
-Tests for data transformation logic that **doesn't** require API calls:
+Pure-logic tests with no real network calls:
 
-- **`frequent-items.test.ts`** - Tests frequency counting, average price calculation, sorting, and category grouping
-- **`meal-suggestions.test.ts`** - Tests category filtering, meal type mapping, and sorting algorithms
+- **`frequent-items.test.ts`** - Frequency counting, average price calculation, sorting, and category grouping
+- **`meal-suggestions.test.ts`** - Category filtering, meal type mapping, and sorting algorithms
+- **`search-products-filter.test.ts`** - Allergen substring matching and additive detection (safety-critical filters)
+
+### HTTP-layer Tests
+
+`rohlik-api.test.ts` replaces `node-fetch` with a `vi.fn()` and scripts response sequences to verify:
+
+- Cookie jar parses `Set-Cookie` name=value pairs and replays them as a clean `Cookie:` header
+- Cookie value rotation (server replaces a cookie on a later response)
+- `ensureLoggedIn` lock: concurrent calls share a single `/login` round-trip
+- 401 invalidates the session and retries once with a fresh login
+- When the retry also fails, `RohlikAPIError` carries `status` and the response body
+- `addToCart` returns `{ added, failed }` with per-product reasons
+- Login success heuristic rejects responses without a `status` field
 
 **What we test:**
 - ✅ Data transformation algorithms
@@ -30,13 +45,13 @@ Tests for data transformation logic that **doesn't** require API calls:
 - ✅ Price averaging calculations
 - ✅ Category filtering and matching
 - ✅ Sorting by frequency/quantity
-- ✅ Edge cases (empty data, missing fields, etc.)
+- ✅ Allergen and additive safety filters
+- ✅ Cookie/session/retry behavior in `RohlikAPI` via mocked `node-fetch`
+- ✅ Edge cases (empty data, missing fields, failed orders, etc.)
 
 **What we DON'T test:**
-- ❌ API calls (covered by integration tests)
-- ❌ Authentication logic
-- ❌ Network requests
-- ❌ Simple pass-through tools
+- ❌ Real API calls (use `npm run validate-api` for that)
+- ❌ Simple pass-through tools (no logic worth covering)
 
 ### Integration Tests
 
@@ -184,13 +199,13 @@ Our tests focus on the **data transformation logic** in smart shopping features:
 
 ## What We Don't Test
 
-To keep tests maintainable and focused, we **don't** test:
+To keep tests maintainable and focused, we **don't** unit-test:
 
-- ❌ Simple pass-through tools (`search_products`, `get_cart_content`, etc.)
-- ❌ API client methods in `rohlik-api.ts` (integration tests cover this)
-- ❌ Authentication flow (complex, requires real credentials)
-- ❌ Network error handling (better tested manually)
-- ❌ Output formatting details (minor changes shouldn't break tests)
+- ❌ Simple pass-through tool wrappers (`get_cart_content`, `get_premium_info`, etc.) — they only stringify a single `RohlikAPI` call
+- ❌ Real network requests (use `npm run validate-api` for end-to-end coverage)
+- ❌ Output formatting details (minor wording changes shouldn't break tests)
+
+The API client (`rohlik-api.ts`) **is** covered by `rohlik-api.test.ts` via mocked `node-fetch`.
 
 ## Integration Testing
 
@@ -214,19 +229,7 @@ This will:
 
 ## Continuous Integration
 
-Tests are designed to run in CI/CD pipelines:
-
-```yaml
-# Example GitHub Actions workflow
-- name: Run tests
-  run: npm test
-
-- name: Generate coverage
-  run: npm run test:coverage
-
-- name: Upload coverage
-  uses: codecov/codecov-action@v3
-```
+`.github/workflows/ci.yml` runs `tsc --noEmit`, `npm run build`, and `npm test` on every push and PR against `main` for Node 18, 20, and 22. `.github/workflows/codeql.yml` runs CodeQL with the `security-extended` and `security-and-quality` query packs on the same triggers plus a weekly cron.
 
 ## Debugging Tests
 
@@ -303,4 +306,4 @@ describe('frequency counting', () => {
 
 ---
 
-**Last updated**: 2025-10-09
+**Last updated**: 2026-05-02
