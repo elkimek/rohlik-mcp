@@ -1,4 +1,5 @@
-import fetch, { RequestInit, Response } from 'node-fetch';
+import fetch from 'node-fetch';
+import type { RequestInit, Response } from 'node-fetch';
 import { Product, SearchResult, CartContent, RohlikCredentials, RohlikAPIResponse, AccountData } from './types.js';
 import { getAcceptLanguage } from './locale.js';
 
