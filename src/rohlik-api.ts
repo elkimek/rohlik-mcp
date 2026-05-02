@@ -553,4 +553,42 @@ export class RohlikAPI {
       await this.logout();
     }
   }
+
+  async getProductComposition(productId: number): Promise<any | null> {
+    await this.login();
+
+    try {
+      const response = await this.makeRequest<any>(`/api/v1/products/${productId}/composition`);
+      // Explicitly return null when data is absent — don't fall back to the API envelope
+      return response.data ?? null;
+    } finally {
+      await this.logout();
+    }
+  }
+
+  async getProductCompositions(productIds: number[]): Promise<Map<number, any | null>> {
+    await this.login();
+
+    try {
+      const results = new Map<number, any | null>();
+      for (let i = 0; i < productIds.length; i++) {
+        const id = productIds[i];
+        try {
+          const response = await this.makeRequest<any>(`/api/v1/products/${id}/composition`);
+          results.set(id, response.data ?? null);
+        } catch (error) {
+          console.error(`Failed to fetch composition for product ${id}:`, error);
+          results.set(id, null);
+        }
+        // Explicit inter-request delay to respect API rate limits and avoid mid-batch throttling
+        // Skip delay after the last item to avoid unnecessary wait
+        if (i < productIds.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      return results;
+    } finally {
+      await this.logout();
+    }
+  }
 }
