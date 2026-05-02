@@ -38,7 +38,7 @@ export function createSearchProductsTool(createRohlikAPI: () => RohlikAPI) {
 
       try {
         const api = createRohlikAPI();
-        let results = await api.searchProducts(product_name, limit * 2, favourite_only);
+        let results = await api.searchProducts(product_name, Math.min(limit * 2, 50), favourite_only);
 
         // Fetch composition data if needed — use batch method to avoid N× login/logout
         if (needsComposition && results.length > 0) {
@@ -109,13 +109,14 @@ export function createSearchProductsTool(createRohlikAPI: () => RohlikAPI) {
         results = results.slice(0, limit);
 
         if (results.length === 0) {
-          const filterNote = needsComposition ? " (after applying composition filters — unknown/missing composition data is treated as unsafe)" : "";
+          const filterNote = safetyFilterActive ? " (after applying safety filters — unknown/missing composition data is treated as unsafe)" : "";
           return {
             content: [{ type: "text" as const, text: `No products found${filterNote} for "${product_name}".` }]
           };
         }
 
-        const output = `Found ${results.length} products${needsComposition ? " (verified for ingredients)" : ""}:\n\n` +
+        const verifiedLabel = safetyFilterActive ? " (safety-verified for ingredients)" : (include_composition ? " (with composition data where available)" : "");
+        const output = `Found ${results.length} products${verifiedLabel}:\n\n` +
           results.map((product: any) => {
             const priceInfo = product.salePrice
               ? `Price: ${product.salePrice} (was ${product.originalPrice}, -${product.discountPercentage}%)`

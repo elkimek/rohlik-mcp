@@ -571,7 +571,8 @@ export class RohlikAPI {
 
     try {
       const results = new Map<number, any | null>();
-      for (const id of productIds) {
+      for (let i = 0; i < productIds.length; i++) {
+        const id = productIds[i];
         try {
           const response = await this.makeRequest<any>(`/api/v1/products/${id}/composition`);
           results.set(id, response.data ?? null);
@@ -580,7 +581,10 @@ export class RohlikAPI {
           results.set(id, null);
         }
         // Explicit inter-request delay to respect API rate limits and avoid mid-batch throttling
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Skip delay after the last item to avoid unnecessary wait
+        if (i < productIds.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
       return results;
     } finally {
